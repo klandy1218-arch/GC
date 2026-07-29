@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grand Chase Classic</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Grand Chase Classic</h1>
+    <p>Jeff Tool </p>
+  </header>
+
+  <main class="app-shell">
+    <div class="tab-head" id="mainTabs">
+      <button class="tab-btn active" data-tab="fashionTab">魔珠時裝</button>
+      <button class="tab-btn" data-tab="damageTab">傷害試算</button>
+    </div>
+
+    <section id="fashionTab" class="tab-panel active">
+      <div class="layout-grid">
+        <aside class="card left-panel">
+          <h2>部位賽季選擇</h2>
+          <p class="hint">每個部位只能選一個賽季。權重總和需等於 10。</p>
+
+          <div id="equipmentRows" class="equipment-rows"></div>
+
+          <div class="btn-row">
+            <button id="recalcBtn">Recalculate</button>
+            <button id="optimizeBtn">Find Best Combo</button>
+            <button id="pauseBtn" disabled>Pause</button>
+          </div>
+
+          <div class="weights card-inline">
+            <h3>權重設定</h3>
+            <div id="weightRows"></div>
+            <div class="weight-foot">
+              <button id="applyDefaultBtn">套用預設權重</button>
+              <span id="weightSum">Weight Sum: 0/10</span>
+            </div>
+          </div>
+
+          <p id="statusLine" class="status">Ready</p>
+        </aside>
+
+        <section class="card right-panel">
+          <div class="tab-head nested" id="resultTabs">
+            <button class="tab-btn active" data-tab="resultView">Result</button>
+            <button class="tab-btn" data-tab="overviewView">Season Overview</button>
+          </div>
+
+          <div id="resultView" class="tab-panel active nested-panel">
+            <div id="resultContent"></div>
+          </div>
+
+          <div id="overviewView" class="tab-panel nested-panel">
+            <div class="overview-toolbar">
+              <label for="overviewSeason">Season</label>
+              <select id="overviewSeason"></select>
+              <button id="overviewRefreshBtn">Refresh</button>
+            </div>
+            <div id="overviewContent"></div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="damageTab" class="tab-panel">
+      <div class="card placeholder">
+        <h2>傷害試算</h2>
+        <p>此分頁先保留，後續可加入傷害公式與技能倍率設定。</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
