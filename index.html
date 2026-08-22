@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Grand Chase Classic</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260822-2">
 </head>
 <body>
   <header class="topbar">
@@ -21,15 +21,33 @@
     <section id="fashionTab" class="tab-panel active">
       <div class="layout-grid">
         <aside class="card left-panel">
-          <h2>部位賽季選擇</h2>
-          <p class="hint">每個部位只能選一個賽季。權重總和需等於 10。</p>
+          <h2>配裝控制</h2>
+          <p class="hint">在右側表格直接點選各部位賽季；最佳組合的權重總和需等於 10。</p>
 
-          <div id="equipmentRows" class="equipment-rows"></div>
+          <div class="total-panel card-inline">
+            <h3>Total Stats</h3>
+            <div id="totalStats" class="total-stats-grid"></div>
+          </div>
+
+          <div class="season-control-block">
+            <h3>全部套用賽季</h3>
+            <p class="hint">點一下即可把所有部位切換成相同賽季。</p>
+            <div id="quickSeasonButtons" class="season-button-grid" aria-label="全部套用賽季"></div>
+          </div>
 
           <div class="btn-row">
-            <button id="recalcBtn">Recalculate</button>
             <button id="optimizeBtn">Find Best Combo</button>
             <button id="pauseBtn" disabled>Pause</button>
+          </div>
+
+          <div id="optimizationProgress" class="optimization-progress" aria-live="polite">
+            <div class="progress-label">
+              <span>搜尋進度</span>
+              <span id="progressText">等待搜尋</span>
+            </div>
+            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
           </div>
 
           <div class="weights card-inline">
@@ -41,27 +59,17 @@
             </div>
           </div>
 
+          <div class="exclude-options card-inline">
+            <h3>最佳組合排除賽季</h3>
+            <p class="hint">選取後，Find Best Combo 將不會使用該賽季。</p>
+            <div id="excludedSeasonButtons" class="season-button-grid" aria-label="搜尋排除賽季"></div>
+          </div>
+
           <p id="statusLine" class="status">Ready</p>
         </aside>
 
         <section class="card right-panel">
-          <div class="tab-head nested" id="resultTabs">
-            <button class="tab-btn active" data-tab="resultView">Result</button>
-            <button class="tab-btn" data-tab="overviewView">Season Overview</button>
-          </div>
-
-          <div id="resultView" class="tab-panel active nested-panel">
-            <div id="resultContent"></div>
-          </div>
-
-          <div id="overviewView" class="tab-panel nested-panel">
-            <div class="overview-toolbar">
-              <label for="overviewSeason">Season</label>
-              <select id="overviewSeason"></select>
-              <button id="overviewRefreshBtn">Refresh</button>
-            </div>
-            <div id="overviewContent"></div>
-          </div>
+          <div id="overviewContent"></div>
         </section>
       </div>
     </section>
@@ -74,6 +82,7 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="list-data.js?v=20260822-2"></script>
+  <script src="app.js?v=20260822-2"></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 const TARGET_STATS = ["CHR", "CHD", "SPATK", "ATK", "MP"];
+const OVERVIEW_SEASONS = ["S5", "S6", "S7", "S8", "S9", "S10", "S11"];
 const ALIASES = { CHR_HALF: "CHR_2_5" };
 const DEFAULT_WEIGHTS = { CHR: 4, CHD: 3, SPATK: 2, ATK: 1, MP: 0 };
 const STAT_LABELS = {
@@ -30,6 +31,7 @@ const seasonClassMap = {
   S8: "season-s8",
   S9: "season-s9",
   S10: "season-s10",
+  S11: "season-s11",
 };
 
 const state = {
@@ -46,22 +48,23 @@ const state = {
   unknownTokens: new Set(),
   optimizing: false,
   paused: false,
-  lastSearchStats: { visited: 0, pruned: 0, leaves: 0 },
+  excludedSeasons: new Set(),
 };
 
 const els = {
   statusLine: document.getElementById("statusLine"),
-  equipmentRows: document.getElementById("equipmentRows"),
   weightRows: document.getElementById("weightRows"),
   weightSum: document.getElementById("weightSum"),
-  resultContent: document.getElementById("resultContent"),
-  overviewSeason: document.getElementById("overviewSeason"),
+  totalStats: document.getElementById("totalStats"),
   overviewContent: document.getElementById("overviewContent"),
   optimizeBtn: document.getElementById("optimizeBtn"),
   pauseBtn: document.getElementById("pauseBtn"),
-  recalcBtn: document.getElementById("recalcBtn"),
   applyDefaultBtn: document.getElementById("applyDefaultBtn"),
-  overviewRefreshBtn: document.getElementById("overviewRefreshBtn"),
+  quickSeasonButtons: document.getElementById("quickSeasonButtons"),
+  excludedSeasonButtons: document.getElementById("excludedSeasonButtons"),
+  optimizationProgress: document.getElementById("optimizationProgress"),
+  progressText: document.getElementById("progressText"),
+  progressBar: document.getElementById("progressBar"),
 };
 
 const weightInputs = {};
@@ -86,6 +89,17 @@ function bonusSortKey(st) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function yieldForPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
+
+function formatProgressPercent(percent) {
+  if (percent > 0 && percent < 1) return `${percent.toFixed(2)}%`;
+  return `${percent.toFixed(1)}%`;
 }
 
 function seasonClass(season) {
@@ -221,196 +235,184 @@ function setStatus(msg) {
   els.statusLine.textContent = msg;
 }
 
-function calcFromSelection(selection) {
+function calculateSelectionSummary() {
   const totals = emptyTotals();
-  const seasonCounter = {};
+  const seasonCounts = {};
 
   state.parts.forEach((part) => {
-    const season = selection[part];
-    seasonCounter[season] = (seasonCounter[season] || 0) + 1;
-    addTotals(totals, state.eqContrib[part][season]);
+    const season = state.selection[part];
+    if (!season) return;
+    seasonCounts[season] = (seasonCounts[season] || 0) + 1;
+    addTotals(totals, state.eqContrib?.[part]?.[season] || emptyTotals());
   });
 
-  const activeBonusLines = [];
-  Object.entries(seasonCounter).forEach(([season, count]) => {
-    const bonus = state.bonusContrib?.[season]?.[count];
-    if (bonus) addTotals(totals, bonus);
-
-    if (state.setBonus?.[season]) {
-      const enabled = Object.keys(state.setBonus[season])
-        .sort((a, b) => bonusSortKey(a) - bonusSortKey(b))
-        .filter((st) => bonusSortKey(st) <= count);
-      if (enabled.length) {
-        activeBonusLines.push(`${season} x${count}: ${enabled.join(" + ")}`);
-      }
-    }
+  Object.entries(seasonCounts).forEach(([season, count]) => {
+    addTotals(totals, state.bonusContrib?.[season]?.[count] || emptyTotals());
   });
 
-  return { totals, activeBonusLines, seasonCounter };
+  return { totals, seasonCounts };
 }
 
-function formatNonZeroStats(stats) {
-  const chunks = [];
-  TARGET_STATS.forEach((s) => {
-    if (Math.abs(stats[s] || 0) > 1e-9) {
-      chunks.push(`${displayStat(s)}+${(stats[s] || 0).toFixed(2)}`);
-    }
-  });
-  return chunks.length ? chunks.join(", ") : "(none)";
-}
-
-function recalculate() {
-  const { totals, activeBonusLines, seasonCounter } = calcFromSelection(state.selection);
-
-  const totalHtml = TARGET_STATS.map(
-    (s) => `<li class="result-line"><strong>${displayStat(s)}</strong>: ${totals[s].toFixed(2)}</li>`
+function renderTotalStats(totals) {
+  els.totalStats.innerHTML = TARGET_STATS.map(
+    (stat) => `
+      <div class="total-stat-item">
+        <span>${displayStat(stat)}</span>
+        <strong>${totals[stat].toFixed(2)}</strong>
+      </div>
+    `
   ).join("");
+}
 
-  const partHtml = state.parts
-    .map((part) => {
-      const season = state.selection[part];
-      const icon = PART_ICONS[part] || "◼";
-      const detail = formatNonZeroStats(state.eqContrib[part][season]);
-      return `<li class="result-line ${seasonClass(season)}">${icon} ${part} [${season}] -> ${detail}</li>`;
-    })
-    .join("");
+function updateOptimizationProgress(percent, label) {
+  const safePercent = Math.max(0, Math.min(100, percent));
+  els.progressBar.style.width = `${safePercent.toFixed(2)}%`;
+  els.progressText.textContent = label;
+  els.optimizationProgress
+    .querySelector('[role="progressbar"]')
+    .setAttribute("aria-valuenow", safePercent.toFixed(2));
+}
 
-  const seasonCountHtml = sortSeasons(Object.keys(seasonCounter))
-    .map((s) => `<li class="result-line ${seasonClass(s)}">${s}: ${seasonCounter[s]}</li>`)
-    .join("");
-
-  const bonusHtml = activeBonusLines.length
-    ? activeBonusLines
-        .map((line) => {
-          const season = line.split(" ", 1)[0];
-          return `<li class="result-line ${seasonClass(season)}">${line}</li>`;
-        })
-        .join("")
-    : "<li class=\"result-line\">(None)</li>";
-
-  const unknown = [...state.unknownTokens].sort();
-  const unknownHtml = unknown.length
-    ? `<div class="result-block"><strong>Warning</strong><div>Unknown tokens: ${unknown.join(", ")}</div></div>`
-    : "";
-
-  els.resultContent.innerHTML = `
-    <div class="result-block">
-      <h3 class="section-title">Total Stats</h3>
-      <ul class="result-list">${totalHtml}</ul>
-    </div>
-    <div class="result-block">
-      <h3 class="section-title">Details by Part</h3>
-      <ul class="result-list">${partHtml}</ul>
-    </div>
-    <div class="result-block">
-      <h3 class="section-title">Season Count</h3>
-      <ul class="result-list">${seasonCountHtml}</ul>
-    </div>
-    <div class="result-block">
-      <h3 class="section-title">Active Set Bonus</h3>
-      <ul class="result-list">${bonusHtml}</ul>
-    </div>
-    ${unknownHtml}
-  `;
-
-  setStatus("Recalculated. Change season or click Find Best Combo.");
+function recalculate(message = "表格已更新，可直接點選賽季或執行 Find Best Combo。") {
+  refreshSeasonOverview();
+  setStatus(message);
 }
 
 function refreshSeasonOverview() {
-  const season = els.overviewSeason.value;
-  const seasonCss = seasonClass(season);
+  const { totals, seasonCounts } = calculateSelectionSummary();
+  renderTotalStats(totals);
 
-  const partCards = state.parts
+  const statsCell = (stats, unavailable = false) => {
+    if (unavailable) return '<span class="empty-stat">尚無資料</span>';
+    const entries = TARGET_STATS.filter((stat) => Math.abs(stats[stat] || 0) > 1e-9);
+    if (!entries.length) return '<span class="empty-stat">(none)</span>';
+    const chips = entries
+      .map(
+        (stat) =>
+          `<span class="stat-chip stat-${stat.toLowerCase()}"><strong>${displayStat(stat)}</strong> +${stats[stat].toFixed(2)}</span>`
+      )
+      .join("");
+    return `${entries.length >= 2 ? '<span class="dual-badge">雙屬性</span>' : ""}${chips}`;
+  };
+
+  const partRows = state.parts
     .map((part) => {
       const icon = PART_ICONS[part] || "◼";
-      const tokens = state.equipment?.[part]?.[season] || [];
-      const stats = tokensToTotals(tokens).totals;
-      const tokenText = tokens.length ? tokens.join(", ") : "(none)";
-      return `
-        <div class="overview-card ${seasonCss}">
-          <h4>${icon} ${part}</h4>
-          <div>Tokens: ${tokenText}</div>
-          <div>Stats: ${formatNonZeroStats(stats)}</div>
-        </div>
-      `;
+      const seasonCells = OVERVIEW_SEASONS.map((season) => {
+        const tokens = state.equipment?.[part]?.[season];
+        const unavailable = !Array.isArray(tokens);
+        const stats = tokensToTotals(tokens || []).totals;
+        const statCount = TARGET_STATS.filter((stat) => Math.abs(stats[stat] || 0) > 1e-9).length;
+        const cellClass = statCount >= 2 ? "multi-stat-cell" : seasonClass(season);
+        const selected = state.selection[part] === season;
+        if (unavailable) {
+          return `<td class="stats-cell overview-stat-cell unavailable-season-cell ${cellClass}">${statsCell(stats, true)}</td>`;
+        }
+        return `
+          <td class="stats-cell overview-stat-cell ${cellClass} ${selected ? "selected-season-cell" : ""}">
+            <button class="overview-season-choice" type="button" data-part="${part}" data-season="${season}" aria-pressed="${selected}">
+              ${selected ? '<span class="selected-badge">已選擇</span>' : ""}
+              ${statsCell(stats)}
+            </button>
+          </td>
+        `;
+      }).join("");
+      return `<tr><th scope="row">${icon} ${part}</th>${seasonCells}</tr>`;
     })
     .join("");
 
-  const bonusCards = Object.keys(state.setBonus?.[season] || {})
+  const bonusThresholds = [...new Set(
+    Object.values(state.setBonus || {}).flatMap((bonusMap) => Object.keys(bonusMap))
+  )]
     .sort((a, b) => bonusSortKey(a) - bonusSortKey(b))
+  const bonusRows = bonusThresholds
     .map((st) => {
-      const tokens = state.setBonus[season][st] || [];
-      const stats = tokensToTotals(tokens).totals;
-      const tokenText = tokens.length ? tokens.join(", ") : "(none)";
-      return `
-        <div class="overview-card ${seasonCss}">
-          <h4>${st}</h4>
-          <div>Tokens: ${tokenText}</div>
-          <div>Stats: ${formatNonZeroStats(stats)}</div>
-        </div>
-      `;
+      const threshold = bonusSortKey(st);
+      const seasonCells = OVERVIEW_SEASONS.map((season) => {
+        const tokens = state.setBonus?.[season]?.[st];
+        const unavailable = !Array.isArray(tokens);
+        const stats = tokensToTotals(tokens || []).totals;
+        const statCount = TARGET_STATS.filter((stat) => Math.abs(stats[stat] || 0) > 1e-9).length;
+        const cellClass = statCount >= 2 ? "multi-stat-cell" : seasonClass(season);
+        const selectedCount = seasonCounts[season] || 0;
+        const active = !unavailable && selectedCount >= threshold;
+        const tracking = !unavailable && selectedCount > 0 && !active;
+        const stateClass = active ? "active-set-cell" : tracking ? "set-progress-cell" : "";
+        const stateBadge = active
+          ? `<span class="set-state-badge active">已啟用 · ${selectedCount}件</span>`
+          : tracking
+            ? `<span class="set-state-badge tracking">${selectedCount}/${threshold} 件</span>`
+            : "";
+        return `<td class="stats-cell overview-stat-cell set-bonus-cell ${cellClass} ${stateClass}">${stateBadge}${statsCell(stats, unavailable)}</td>`;
+      }).join("");
+      return `<tr><th scope="row">${st}</th>${seasonCells}</tr>`;
     })
     .join("");
+
+  const seasonHeaders = OVERVIEW_SEASONS.map(
+    (season) => `<th class="${seasonClass(season)}">${season}</th>`
+  ).join("");
 
   els.overviewContent.innerHTML = `
-    <h3 class="section-title ${seasonCss}">${season} Equipment Overview</h3>
+    <h3 class="section-title">All Season Equipment Overview</h3>
     <div class="result-block">
       <h4>By Equipment Order</h4>
-      ${partCards}
+      <div class="table-scroll">
+        <table class="overview-table season-comparison-table">
+          <thead><tr><th>部位</th>${seasonHeaders}</tr></thead>
+          <tbody>${partRows}</tbody>
+        </table>
+      </div>
     </div>
     <div class="result-block">
       <h4>Set Bonus</h4>
-      ${bonusCards}
+      <div class="table-scroll">
+        <table class="overview-table season-comparison-table">
+          <thead><tr><th>套裝門檻</th>${seasonHeaders}</tr></thead>
+          <tbody>${bonusRows}</tbody>
+        </table>
+      </div>
     </div>
   `;
 }
 
-function updateBadge(row, season) {
-  const badge = row.querySelector(".badge");
-  badge.textContent = season;
-  badge.className = `badge ${seasonClass(season)}`;
-  const colors = {
-    S5: "var(--s5)", S6: "var(--s6)", S7: "var(--s7)",
-    S8: "var(--s8)", S9: "var(--s9)", S10: "var(--s10)",
-  };
-  badge.style.background = colors[season] || "#3a5469";
-}
+function renderSeasonControls() {
+  const seasons = sortSeasons([...new Set(state.parts.flatMap((part) => state.seasonsByPart[part]))]);
 
-function renderEquipmentRows() {
-  els.equipmentRows.innerHTML = "";
-  state.parts.forEach((part) => {
-    const row = document.createElement("div");
-    row.className = "equipment-row";
+  els.quickSeasonButtons.innerHTML = "";
+  els.excludedSeasonButtons.innerHTML = "";
 
-    const seasonList = state.seasonsByPart[part];
-    const name = document.createElement("div");
-    name.className = "equipment-name";
-    name.textContent = `${PART_ICONS[part] || "◼"} ${part}`;
-
-    const sel = document.createElement("select");
-    seasonList.forEach((s) => {
-      const opt = document.createElement("option");
-      opt.value = s;
-      opt.textContent = s;
-      sel.appendChild(opt);
+  seasons.forEach((season) => {
+    const applyBtn = document.createElement("button");
+    applyBtn.type = "button";
+    applyBtn.className = `season-action ${seasonClass(season)}`;
+    applyBtn.textContent = season;
+    applyBtn.addEventListener("click", () => {
+      state.parts.forEach((part) => {
+        if (state.seasonsByPart[part].includes(season)) state.selection[part] = season;
+      });
+      recalculate(`已將所有部位套用 ${season}。`);
     });
-    sel.value = state.selection[part];
+    els.quickSeasonButtons.appendChild(applyBtn);
 
-    const badge = document.createElement("div");
-    badge.className = "badge";
-
-    row.appendChild(name);
-    row.appendChild(sel);
-    row.appendChild(badge);
-    els.equipmentRows.appendChild(row);
-
-    updateBadge(row, state.selection[part]);
-
-    sel.addEventListener("change", () => {
-      state.selection[part] = sel.value;
-      updateBadge(row, sel.value);
-      recalculate();
+    const excludeBtn = document.createElement("button");
+    excludeBtn.type = "button";
+    excludeBtn.className = `season-action exclude-season ${seasonClass(season)}`;
+    excludeBtn.textContent = season;
+    excludeBtn.setAttribute("aria-pressed", "false");
+    excludeBtn.addEventListener("click", () => {
+      if (state.excludedSeasons.has(season)) {
+        state.excludedSeasons.delete(season);
+      } else {
+        state.excludedSeasons.add(season);
+      }
+      const excluded = state.excludedSeasons.has(season);
+      excludeBtn.classList.toggle("selected", excluded);
+      excludeBtn.setAttribute("aria-pressed", String(excluded));
+      const list = sortSeasons([...state.excludedSeasons]);
+      setStatus(list.length ? `最佳組合將排除：${list.join(", ")}` : "已清除賽季排除條件。");
     });
+    els.excludedSeasonButtons.appendChild(excludeBtn);
   });
 }
 
@@ -488,8 +490,11 @@ function buildOptimizationCache(weights) {
   state.parts.forEach((part) => {
     let dualCount = 0;
     const vals = [];
+    const eligibleSeasons = state.seasonsByPart[part].filter(
+      (season) => !state.excludedSeasons.has(season)
+    );
 
-    state.seasonsByPart[part].forEach((season) => {
+    eligibleSeasons.forEach((season) => {
       const score = weightedFromStats(state.eqContrib[part][season], weights);
       partSeasonScore[`${part}|${season}`] = score;
       vals.push(score);
@@ -497,7 +502,7 @@ function buildOptimizationCache(weights) {
     });
 
     const spread = vals.length ? Math.max(...vals) - Math.min(...vals) : 0;
-    partMeta.push({ part, spread, dualCount });
+    partMeta.push({ part, spread, dualCount, eligibleSeasons });
   });
 
   const orderedParts = [...partMeta]
@@ -508,7 +513,8 @@ function buildOptimizationCache(weights) {
   const maxSeasonScoreByPart = {};
 
   orderedParts.forEach((part) => {
-    const ranked = [...state.seasonsByPart[part]].sort((a, b) => {
+    const eligibleSeasons = partMeta.find((meta) => meta.part === part).eligibleSeasons;
+    const ranked = [...eligibleSeasons].sort((a, b) => {
       const sa = partSeasonScore[`${part}|${a}`];
       const sb = partSeasonScore[`${part}|${b}`];
       if (sb !== sa) return sb - sa;
@@ -546,6 +552,16 @@ async function runOptimize() {
   const weightSum = refreshWeightSum();
   if (Math.abs(weightSum - 10) > 1e-9) {
     setStatus(`Weight sum invalid: ${weightSum.toFixed(2)}/10`);
+    updateOptimizationProgress(0, "權重設定錯誤");
+    return;
+  }
+
+  const unavailablePart = state.parts.find((part) =>
+    state.seasonsByPart[part].every((season) => state.excludedSeasons.has(season))
+  );
+  if (unavailablePart) {
+    setStatus(`無法搜尋：${unavailablePart} 的所有賽季都被排除了。`);
+    updateOptimizationProgress(0, "無法開始搜尋");
     return;
   }
 
@@ -554,16 +570,24 @@ async function runOptimize() {
   els.pauseBtn.disabled = false;
   els.pauseBtn.textContent = "Pause";
   els.optimizeBtn.disabled = true;
-  setStatus("Optimizing... Please wait");
+  const excludedLabel = sortSeasons([...state.excludedSeasons]).join(", ");
+  setStatus(excludedLabel ? `Optimizing... 已排除 ${excludedLabel}` : "Optimizing... Please wait");
+  els.optimizationProgress.classList.remove("paused");
+  els.optimizationProgress.classList.add("running");
+  updateOptimizationProgress(0, "0.0%");
+  await yieldForPaint();
 
   const weights = getWeights();
   const cache = buildOptimizationCache(weights);
   const { orderedParts, orderedSeasonsByPart, partSeasonScore, remainingEqUpper, bonusScore } = cache;
 
-  let totalCombos = 1;
-  orderedParts.forEach((p) => {
-    totalCombos *= orderedSeasonsByPart[p].length;
-  });
+  const remainingComboCounts = new Array(orderedParts.length + 1).fill(1);
+  for (let i = orderedParts.length - 1; i >= 0; i -= 1) {
+    remainingComboCounts[i] =
+      remainingComboCounts[i + 1] * orderedSeasonsByPart[orderedParts[i]].length;
+  }
+  const totalCombos = remainingComboCounts[0];
+  let processedCombos = 0;
 
   let bestSelection = null;
   let bestScore = -Infinity;
@@ -571,8 +595,6 @@ async function runOptimize() {
   const currentCounts = {};
 
   let visited = 0;
-  let pruned = 0;
-  let leaves = 0;
 
   async function dfs(idx, eqScore) {
     while (state.paused) {
@@ -580,9 +602,10 @@ async function runOptimize() {
     }
 
     visited += 1;
-    if (visited % 1400 === 0) {
-      setStatus(`Optimizing... checked ${leaves}/${totalCombos}, visited ${visited}, pruned ${pruned}`);
-      await sleep(0);
+    if (visited % 500 === 0) {
+      const percent = (processedCombos / totalCombos) * 100;
+      updateOptimizationProgress(percent, formatProgressPercent(percent));
+      await yieldForPaint();
     }
 
     const remainingSlots = orderedParts.length - idx;
@@ -592,12 +615,12 @@ async function runOptimize() {
       bonusUpperBound(currentCounts, remainingSlots, state.parts.length, bonusScore);
 
     if (optimistic <= bestScore) {
-      pruned += 1;
+      processedCombos += remainingComboCounts[idx];
       return;
     }
 
     if (idx === orderedParts.length) {
-      leaves += 1;
+      processedCombos += 1;
       const finalScore = eqScore + bonusScoreFromCounts(currentCounts, bonusScore);
       if (finalScore > bestScore) {
         bestScore = finalScore;
@@ -628,34 +651,18 @@ async function runOptimize() {
     console.error(err);
   }
 
-  state.lastSearchStats = { visited, pruned, leaves };
   state.optimizing = false;
+  els.optimizationProgress.classList.remove("running", "paused");
   els.pauseBtn.disabled = true;
   els.optimizeBtn.disabled = false;
 
   if (bestSelection) {
     state.selection = { ...state.selection, ...bestSelection };
-    renderEquipmentRows();
-    recalculate();
-
-    const bestHtml = `
-      <div class="result-block">
-        <h3 class="section-title">Best Combo (Weighted)</h3>
-        <div>Score: ${bestScore.toFixed(3)}</div>
-        <ul class="result-list">
-          ${state.parts.map((p) => `<li>${p}: ${state.selection[p]}</li>`).join("")}
-        </ul>
-      </div>
-      <div class="result-block">
-        <h3 class="section-title">Search Stats</h3>
-        <div>visited nodes: ${visited}</div>
-        <div>pruned nodes: ${pruned}</div>
-        <div>checked leaves: ${leaves}</div>
-      </div>
-    `;
-    els.resultContent.insertAdjacentHTML("beforeend", bestHtml);
-    setStatus("Optimization done. Best combo applied.");
+    updateOptimizationProgress(100, "完成 100%");
+    await yieldForPaint();
+    recalculate("最佳組合已套用，結果以表格選取框標示。");
   } else {
+    updateOptimizationProgress(0, "搜尋失敗");
     setStatus("Optimization failed: no result");
   }
 }
@@ -664,6 +671,14 @@ function togglePause() {
   if (!state.optimizing) return;
   state.paused = !state.paused;
   els.pauseBtn.textContent = state.paused ? "Resume" : "Pause";
+  els.optimizationProgress.classList.toggle("paused", state.paused);
+  const currentPercent = Number(
+    els.optimizationProgress.querySelector('[role="progressbar"]').getAttribute("aria-valuenow") || 0
+  );
+  updateOptimizationProgress(
+    currentPercent,
+    state.paused ? `已暫停 ${currentPercent.toFixed(1)}%` : `${currentPercent.toFixed(1)}%`
+  );
   setStatus(state.paused ? "Optimization paused" : "Optimization resumed");
 }
 
@@ -680,37 +695,39 @@ function bindMainTabs() {
   });
 }
 
-function bindResultTabs() {
-  const root = document.getElementById("resultTabs");
-  const panels = [document.getElementById("resultView"), document.getElementById("overviewView")];
-  root.addEventListener("click", (e) => {
-    const btn = e.target.closest(".tab-btn");
-    if (!btn) return;
-    root.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    const target = btn.getAttribute("data-tab");
-    panels.forEach((p) => p.classList.toggle("active", p.id === target));
-  });
-}
-
 async function init() {
   bindMainTabs();
-  bindResultTabs();
 
-  els.recalcBtn.addEventListener("click", recalculate);
   els.optimizeBtn.addEventListener("click", runOptimize);
   els.pauseBtn.addEventListener("click", togglePause);
   els.applyDefaultBtn.addEventListener("click", applyDefaultWeights);
-  els.overviewRefreshBtn.addEventListener("click", refreshSeasonOverview);
+  els.overviewContent.addEventListener("click", (event) => {
+    const choice = event.target.closest(".overview-season-choice");
+    if (!choice) return;
+    const part = choice.dataset.part;
+    const season = choice.dataset.season;
+    if (!state.equipment?.[part]?.[season]) return;
+    state.selection[part] = season;
+    recalculate(`${part} 已選擇 ${season}。`);
+  });
 
-  try {
-    const res = await fetch("./list.json", { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    state.data = await res.json();
-  } catch (err) {
-    setStatus("Failed to load list.json. Please run via GitHub Pages or local web server.");
-    console.error(err);
-    return;
+  if (window.location.protocol === "file:" && window.GC_DATA) {
+    state.data = window.GC_DATA;
+  } else {
+    try {
+      const res = await fetch("./list.json", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      state.data = await res.json();
+    } catch (err) {
+      if (window.GC_DATA) {
+        state.data = window.GC_DATA;
+        console.warn("list.json could not be loaded; using bundled data instead.", err);
+      } else {
+        setStatus("無法載入 list.json，請確認資料檔與 index.html 位於相同資料夾。");
+        console.error(err);
+        return;
+      }
+    }
   }
 
   state.statDefs = state.data.StatDefinitions;
@@ -725,15 +742,9 @@ async function init() {
 
   buildPrecompute();
   renderWeightRows();
-  renderEquipmentRows();
-
-  const seasonOptions = sortSeasons(Object.keys(state.setBonus));
-  els.overviewSeason.innerHTML = seasonOptions.map((s) => `<option value="${s}">${s}</option>`).join("");
-  els.overviewSeason.value = seasonOptions[0] || "";
-  els.overviewSeason.addEventListener("change", refreshSeasonOverview);
+  renderSeasonControls();
 
   recalculate();
-  refreshSeasonOverview();
 }
 
 init();
