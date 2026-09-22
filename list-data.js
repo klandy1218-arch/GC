@@ -8,6 +8,7 @@ window.GC_DATA = {
     "ATK": { "value": 40 },
     "MP": { "value": 4 },
 
+    "CHR_1": { "value": 1 },
     "CHR_2": { "value": 2 },
     "CHR_2_5": { "value": 2.5 },
     "CHR_3": { "value": 3 },
@@ -36,7 +37,8 @@ window.GC_DATA = {
       "S7": ["CHD"],
       "S8": [],
       "S9": [],
-      "S10": ["CHR"]
+      "S10": ["CHR"],
+      "S11": ["CHR"]
     },
     "BODY": {
       "S5": [],
@@ -44,7 +46,8 @@ window.GC_DATA = {
       "S7": ["CHD"],
       "S8": [],
       "S9": ["ATK", "CHR"],
-      "S10": ["SPATK"]
+      "S10": ["SPATK"],
+      "S11": ["CHD"]
     },
     "PANTS": {
       "S5": ["CHD"],
@@ -52,7 +55,8 @@ window.GC_DATA = {
       "S7": [],
       "S8": ["MP"],
       "S9": ["SPATK"],
-      "S10": ["SPATK"]
+      "S10": ["SPATK"],
+      "S11": ["CHR"]
     },
     "GLOVES": {
       "S5": ["SPATK", "ATK"],
@@ -60,7 +64,8 @@ window.GC_DATA = {
       "S7": ["ATK"],
       "S8": ["CHR_HALF", "SPATK"],
       "S9": ["SPATK"],
-      "S10": ["CHR_HALF", "ATK"]
+      "S10": ["CHR_HALF", "ATK"],
+      "S11": ["CHD"]
     },
     "SHOES": {
       "S5": ["MP"],
@@ -68,7 +73,8 @@ window.GC_DATA = {
       "S7": ["MP"],
       "S8": ["CHD"],
       "S9": ["MP", "ATK"],
-      "S10": ["ATK"]
+      "S10": ["ATK"],
+      "S11": ["SPATK"]
     },
     "CAPE": {
       "S5": ["ATK"],
@@ -76,7 +82,8 @@ window.GC_DATA = {
       "S7": ["ATK", "CHR"],
       "S8": ["CHR"],
       "S9": [],
-      "S10": ["MP", "CHD"]
+      "S10": ["MP", "CHD"],
+      "S11": ["MP","ATK"]
     },
     "WEAPON": {
       "S5": ["CHD"],
@@ -84,7 +91,8 @@ window.GC_DATA = {
       "S7": ["CHR"],
       "S8": ["ATK"],
       "S9": ["SPATK", "CHD"],
-      "S10": ["CHD"]
+      "S10": ["CHD"],
+      "S11": ["ATK"]
     },
     "HEAD_TOP": {
       "S5": [],
@@ -92,7 +100,8 @@ window.GC_DATA = {
       "S7": ["MP"],
       "S8": ["MP"],
       "S9": ["ATK", "CHD"],
-      "S10": ["ATK", "CHR"]
+      "S10": ["ATK", "CHR"],
+      "S11": ["ATK","CHR"]
     },
     "HEAD_BOTTOM": {
       "S5": ["SPATK"],
@@ -100,7 +109,8 @@ window.GC_DATA = {
       "S7": ["ATK"],
       "S8": ["ATK", "CHR"],
       "S9": ["ATK", "CHR"],
-      "S10": ["SPATK", "CHD"]
+      "S10": ["SPATK", "CHD"],
+      "S11": ["ATK", "CHD"]
     },
     "GARMENT_TOP": {
       "S5": ["ATK"],
@@ -108,7 +118,8 @@ window.GC_DATA = {
       "S7": ["MP", "CHD"],
       "S8": [],
       "S9": ["MP", "CHD"],
-      "S10": ["MP"]
+      "S10": ["MP"],
+      "S11": ["MP","CHD"]
     },
     "GARMENT_BOTTOM": {
       "S5": [],
@@ -116,7 +127,8 @@ window.GC_DATA = {
       "S7": ["ATK"],
       "S8": [],
       "S9": [],
-      "S10": ["ATK", "CHD"]
+      "S10": ["ATK", "CHD"],
+      "S11": ["SPATK", "CHR"]
     },
     "ACCESSORY": {
       "S5": ["CHR"],
@@ -124,7 +136,8 @@ window.GC_DATA = {
       "S7": [],
       "S8": ["CHD"],
       "S9": [],
-      "S10": ["CHR"]
+      "S10": ["CHR"],
+      "S11": ["CHD"]
     }
   },
   "SetBonus": {
@@ -163,6 +176,12 @@ window.GC_DATA = {
       "ST8": ["MP_5"],
       "ST10": ["ATK_400"],
       "ST12": ["CHD_10"]
+    },
+    "S11": {
+      "ST4": ["ATK_400"],
+      "ST8": ["MP_5"],
+      "ST10": ["CHR_1"],
+      "ST12": ["CHD_8","SPATK_400"]
     }
   }
 };
